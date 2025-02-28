@@ -1,5 +1,4 @@
-Here's the refined **GitHub README** with your name and contact details included:  
-
+  
 ---
 
 # **TraceNet - IoT Device Tracking System**  
@@ -69,4 +68,3 @@ This project is licensed under the MIT License.
 
 ---
 
-Let me know if you'd like any further refinements! 🚀
