@@ -1,54 +1,77 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useAccount, useReadContract, useContractWrite } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { motion } from 'framer-motion';
 import { HardDrive } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import deviceRegistryAbi from '../abis/DeviceRegistry.json';
-import { keccak256, stringToHex } from 'viem'; // For generating deviceHash
+import { useDeviceRegistry } from '@/hooks/useDeviceRegistry';
+import { useIPFSStorage } from '@/hooks/useIPFSStorage';
+import { toast } from 'sonner';
 
-const DEVICE_REGISTRY = "0x7F87c05515b919b6611B8610EC68A0DF0ab9Dd25";
+// Updated contract address
+const DEVICE_REGISTRY = "0xE851a734e8f310951e6d27C3B087FE939E371Fbd";
 
-export default function Devices() {
+export default function DevicesPage() {
   const { isConnected, address } = useAccount();
   const [deviceName, setDeviceName] = useState('');
   const [deviceType, setDeviceType] = useState('');
   const [deviceLocation, setDeviceLocation] = useState('');
-
-  const { data: devices, isLoading: devicesLoading } = useReadContract({
-    address: DEVICE_REGISTRY as `0x${string}`,
-    abi: deviceRegistryAbi.abi,
-    functionName: 'getDevicesByOwnerPaginated',
-    args: [address, 0, 10],
-    enabled: isConnected && !!address,
-  });
-
-  const { writeAsync: registerDevice, isLoading: registering } = useContractWrite({
-    address: DEVICE_REGISTRY as `0x${string}`,
-    abi: deviceRegistryAbi.abi,
-    functionName: 'registerDevice',
-  });
+  const [registering, setRegistering] = useState(false);
+  
+  const { registerDevice, devices, devicesLoading } = useDeviceRegistry(DEVICE_REGISTRY);
+  const { storeDeviceMetadata, isUploading } = useIPFSStorage();
 
   const handleRegisterDevice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!deviceName || !deviceType || !deviceLocation) return;
+    if (!deviceName || !deviceType || !deviceLocation) {
+      toast.error('Please fill in all fields');
+      return;
+    }
 
+    setRegistering(true);
     try {
-      const deviceHash = keccak256(stringToHex(deviceName)); // Generate hash from name
+      // First store metadata on IPFS
+      const cid = await storeDeviceMetadata({
+        name: deviceName,
+        type: deviceType,
+        location: deviceLocation,
+        owner: address || '',
+        status: 'active',
+        additionalInfo: {
+          registeredAt: new Date().toISOString(),
+        }
+      });
+
+      if (!cid) throw new Error('Failed to get IPFS CID');
+
+      // Register device on-chain with IPFS CID
       await registerDevice({
-        args: [deviceHash, deviceType, 'Manufacturer', 'Model', deviceLocation, '0x'], // Simplified signature
+        deviceType,
+        location: deviceLocation,
+        ipfsCid: cid
       });
 
       // Reset form
       setDeviceName('');
       setDeviceType('');
       setDeviceLocation('');
+
     } catch (error) {
       console.error('Error registering device:', error);
+      toast.error('Failed to register device. Please try again.');
+    } finally {
+      setRegistering(false);
     }
   };
 
@@ -104,8 +127,12 @@ export default function Devices() {
                 className="w-full bg-background text-foreground border-border transition-all smooth-transition"
               />
             </div>
-            <Button type="submit" className="btn-modern w-full transition-all smooth-transition" disabled={registering}>
-              {registering ? 'Registering...' : 'Register Device'}
+            <Button 
+              type="submit" 
+              className="btn-modern w-full transition-all smooth-transition" 
+              disabled={registering || isUploading}
+            >
+              {registering || isUploading ? 'Registering...' : 'Register Device'}
             </Button>
           </form>
         </div>
@@ -121,18 +148,22 @@ export default function Devices() {
                 <TableHeader className="bg-muted">
                   <TableRow>
                     <TableHead className="text-foreground text-center">Hash</TableHead>
-                    <TableHead className="text-foreground text-center">Type</TableHead>
-                    <TableHead className="text-foreground text-center">Location</TableHead>
+                    <TableHead className="text-foreground text-center">IPFS CID</TableHead>
                     <TableHead className="text-foreground text-center">Status</TableHead>
+                    <TableHead className="text-foreground text-center">Registration Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {devices.map((device: any, index: number) => (
                     <TableRow key={index} className="hover:bg-muted/50 transition-all smooth-transition">
                       <TableCell className="text-foreground text-center">{device.deviceHash}</TableCell>
-                      <TableCell className="text-foreground text-center">{device.deviceType}</TableCell>
-                      <TableCell className="text-foreground text-center">{device.location}</TableCell>
-                      <TableCell className="text-foreground text-center">{device.status}</TableCell>
+                      <TableCell className="text-foreground text-center">{device.ipfsCid}</TableCell>
+                      <TableCell className="text-foreground text-center">
+                        {['Inactive', 'Active', 'Suspended', 'Retired'][device.status]}
+                      </TableCell>
+                      <TableCell className="text-foreground text-center">
+                        {new Date(Number(device.registrationDate) * 1000).toLocaleDateString()}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

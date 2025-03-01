@@ -150,4 +150,30 @@ contract OracleIntegration is ChainlinkClient, ReentrancyGuard {
         LinkTokenInterface link = LinkTokenInterface(chainlinkTokenAddress());
         require(link.transfer(msg.sender, link.balanceOf(address(this))), "Unable to transfer");
     }
+
+    /**
+     * @dev Returns an array of pending (unresolved) verification requests
+     */
+    function getPendingDisputes() external view returns (VerificationRequest[] memory) {
+        uint256 count = 0;
+        for (uint256 i = 0; i < requestCount; i++) {
+            bytes32 requestKey = keccak256(abi.encodePacked(i)); // Assuming requestCount as index
+            if (!requests[requestKey].resolved) {
+                count++;
+            }
+        }
+        VerificationRequest[] memory pending = new VerificationRequest[](count);
+        uint256 index = 0;
+        for (uint256 i = 0; i < requestCount; i++) {
+            bytes32 requestKey = keccak256(abi.encodePacked(i));
+            if (!requests[requestKey].resolved) {
+                pending[index] = requests[requestKey];
+                index++;
+            }
+        }
+        return pending;
+    }
+
+    // Note: requestCount is not defined in the original contract. Add it as a state variable.
+    uint256 public requestCount; // Added to track total requests
 }

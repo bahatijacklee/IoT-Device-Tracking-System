@@ -1,89 +1,72 @@
 import { useState, useEffect } from 'react';
-import { useAccount, useContractRead } from 'wagmi';
-import { formatUnits } from 'viem';
+import { useAccount, useContractRead, useContractWrite } from 'wagmi';
+import { formatUnits, keccak256, stringToHex } from 'viem';
+import { toast } from 'sonner';
 import deviceRegistryAbi from '@/abis/DeviceRegistry.json';
 
-const DEVICE_REGISTRY = "0x18C792C368279C490042E85fb4DCC2FB650CE44e"; // Replace with actual contract address
-
-export interface Device {
-  id: string;
-  owner: string;
-  name: string;
-  dataType: string;
-  isActive: boolean;
-  reputation: number;
+interface Device {
+  deviceHash: string;
+  status: number;
+  registrationDate: number;
+  lastUpdated: number;
+  ipfsCid: string;
 }
 
-export function useDeviceRegistry() {
+export function useDeviceRegistry(contractAddress: string) {
   const { address } = useAccount();
-  const [userDevices, setUserDevices] = useState<Device[]>([]);
-  const [publicDevices, setPublicDevices] = useState<Device[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [devices, setDevices] = useState<Device[]>([]);
 
-  // Read user's devices
-  const { data: userDevicesData } = useContractRead({
-    address: DEVICE_REGISTRY as `0x${string}`,
+  // Read devices from contract
+  const { data: deviceData, isLoading: devicesLoading } = useContractRead({
+    address: contractAddress as `0x${string}`,
     abi: deviceRegistryAbi.abi,
-    functionName: 'getDevicesByOwner',
-    args: [address],
-    enabled: !!address,
+    functionName: 'getDevicesByOwnerPaginated',
+    args: [address, 0, 10], // Pagination parameters
+    watch: true,
   });
 
-  // Read public devices
-  const { data: publicDevicesData } = useContractRead({
-    address: DEVICE_REGISTRY as `0x${string}`,
+  // Write function for device registration
+  const { writeAsync: registerDeviceWrite } = useContractWrite({
+    address: contractAddress as `0x${string}`,
     abi: deviceRegistryAbi.abi,
-    functionName: 'getPublicDevices',
+    functionName: 'registerDevice',
   });
 
-  // Check if user is admin
-  const { data: isAdminData } = useContractRead({
-    address: DEVICE_REGISTRY as `0x${string}`,
-    abi: deviceRegistryAbi.abi,
-    functionName: 'hasRole',
-    args: ['0x0000000000000000000000000000000000000000000000000000000000000000', address], // DEFAULT_ADMIN_ROLE
-    enabled: !!address,
-  });
+  // Register a new device
+  const registerDevice = async ({ deviceType, location, ipfsCid }: { deviceType: string; location: string; ipfsCid: string }) => {
+    try {
+      // Generate device hash from IPFS CID to ensure uniqueness
+      const deviceHash = keccak256(stringToHex(ipfsCid));
 
-  useEffect(() => {
-    if (userDevicesData) {
-      setUserDevices(
-        (userDevicesData as any[]).map((device: any) => ({
-          id: device.id,
-          owner: device.owner,
-          name: device.name,
-          dataType: device.dataType,
-          isActive: device.isActive,
-          reputation: Number(formatUnits(device.reputation, 0)),
-        }))
-      );
-    }
-  }, [userDevicesData]);
+      // Call the contract with new structure
+      const tx = await registerDeviceWrite({
+        args: [
+          deviceHash,
+          ipfsCid,
+          '0x' // Empty signature for now
+        ],
+      });
 
-  useEffect(() => {
-    if (publicDevicesData) {
-      setPublicDevices(
-        (publicDevicesData as any[]).map((device: any) => ({
-          id: device.id,
-          owner: device.owner,
-          name: device.name,
-          dataType: device.dataType,
-          isActive: device.isActive,
-          reputation: Number(formatUnits(device.reputation, 0)),
-        }))
-      );
+      await tx.wait();
+      toast.success('Device registered successfully!');
+      return tx;
+    } catch (error) {
+      console.error('Error registering device:', error);
+      toast.error('Failed to register device');
+      throw error;
     }
-  }, [publicDevicesData]);
+  };
 
+  // Update devices state when data changes
   useEffect(() => {
-    if (isAdminData !== undefined) {
-      setIsAdmin(isAdminData as boolean);
+    if (deviceData) {
+      setDevices(deviceData as Device[]);
     }
-  }, [isAdminData]);
+  }, [deviceData]);
 
   return {
-    userDevices,
-    publicDevices,
-    isAdmin,
+    devices,
+    devicesLoading,
+    registerDevice,
   };
 }

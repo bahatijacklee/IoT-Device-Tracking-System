@@ -24,7 +24,7 @@ contract DeviceRegistry is AccessControl, Pausable, ReentrancyGuard, EIP712 {
     
     // EIP-712 typehash for signed registrations
     bytes32 private constant REGISTER_TYPEHASH = 
-        keccak256("RegisterDevice(bytes32 deviceHash,string deviceType,string manufacturer,string model,string location)");
+        keccak256("RegisterDevice(bytes32 deviceHash,string ipfsCid)"); // Updated for ipfsCid
 
     // Device status enum
     enum DeviceStatus { Inactive, Active, Suspended, Retired }
@@ -35,10 +35,8 @@ contract DeviceRegistry is AccessControl, Pausable, ReentrancyGuard, EIP712 {
         DeviceStatus status;   // Current status
         uint40 registrationDate; // Timestamp of registration
         uint40 lastUpdated;    // Last update timestamp
-        string deviceType;     // Device type (e.g., "sensor")
-        string manufacturer;   // Manufacturer name
-        string model;          // Model identifier
-        string location;       // Physical location
+        bytes32 deviceHash;    // Unique device identifier
+        string ipfsCid;        // IPFS CID for off-chain metadata (replaces deviceType, manufacturer, model, location)
     }
 
     struct DeviceView {
@@ -47,20 +45,17 @@ contract DeviceRegistry is AccessControl, Pausable, ReentrancyGuard, EIP712 {
         DeviceStatus status;
         uint256 registrationDate;
         uint256 lastUpdated;
-        string deviceType;
-        string manufacturer;
-        string model;
-        string location;
+        string ipfsCid;        // Updated to reflect ipfsCid
     }
 
     // Storage mappings
     mapping(bytes32 => Device) private _devices;               // Device data by hash
     mapping(address => bytes32[]) private _ownerDevices;       // Devices per owner
     mapping(bytes32 => address) private _deviceOwners;         // Quick owner lookup
-    mapping(string => uint256) private _deviceTypeCounts;      // Count of devices by type
+    mapping(string => uint256) private _deviceTypeCounts;      // Count of devices by type (can be removed if ipfsCid handles this)
 
     // Events for tracking
-    event DeviceRegistered(bytes32 indexed deviceHash, address indexed owner, string deviceType, uint256 timestamp);
+    event DeviceRegistered(bytes32 indexed deviceHash, address indexed owner, string ipfsCid, uint256 timestamp); // Updated event
     event DeviceStatusUpdated(bytes32 indexed deviceHash, DeviceStatus newStatus, address indexed updatedBy, uint256 timestamp);
     event DeviceOwnershipTransferred(bytes32 indexed deviceHash, address indexed previousOwner, address indexed newOwner, uint256 timestamp);
     event DeviceRetired(bytes32 indexed deviceHash, uint256 timestamp);
@@ -98,18 +93,15 @@ contract DeviceRegistry is AccessControl, Pausable, ReentrancyGuard, EIP712 {
     }
 
     /**
-     * @dev Registers a device with optional EIP-712 signature
+     * @dev Registers a device with optional EIP-712 signature using IPFS CID
      */
     function registerDevice(
         bytes32 deviceHash,
-        string calldata deviceType,
-        string calldata manufacturer,
-        string calldata model,
-        string calldata location,
+        string calldata ipfsCid, // Replaced deviceType, manufacturer, model, location with ipfsCid
         bytes calldata signature
     ) external whenNotPaused nonReentrant {
-        _validateRegistration(deviceHash, deviceType, manufacturer, model, location, signature);
-        _executeRegistration(deviceHash, deviceType, manufacturer, model, location, msg.sender);
+        _validateRegistration(deviceHash, ipfsCid, signature);
+        _executeRegistration(deviceHash, ipfsCid, msg.sender);
     }
 
     /**
@@ -218,10 +210,7 @@ contract DeviceRegistry is AccessControl, Pausable, ReentrancyGuard, EIP712 {
                 status: d.status,
                 registrationDate: d.registrationDate,
                 lastUpdated: d.lastUpdated,
-                deviceType: d.deviceType,
-                manufacturer: d.manufacturer,
-                model: d.model,
-                location: d.location
+                ipfsCid: d.ipfsCid // Updated to reflect ipfsCid
             });
             unchecked { ++i; }
         }
@@ -231,16 +220,10 @@ contract DeviceRegistry is AccessControl, Pausable, ReentrancyGuard, EIP712 {
     // Internal helpers
     function _validateRegistration(
         bytes32 deviceHash,
-        string calldata deviceType,
-        string calldata manufacturer,
-        string calldata model,
-        string calldata location,
+        string calldata ipfsCid, // Replaced with ipfsCid
         bytes calldata signature
     ) private view {
-        if (bytes(deviceType).length == 0 || bytes(deviceType).length > 64) revert InvalidDeviceType();
-        if (bytes(manufacturer).length > 64) revert InvalidDeviceType();
-        if (bytes(model).length > 64) revert InvalidDeviceType();
-        if (bytes(location).length > 64) revert InvalidDeviceType();
+        if (bytes(ipfsCid).length == 0 || bytes(ipfsCid).length > 128) revert InvalidDeviceType(); // Adjusted length check
         if (_devices[deviceHash].registrationDate != 0) revert DeviceExists();
         
         if (signature.length > 0) {
@@ -248,10 +231,7 @@ contract DeviceRegistry is AccessControl, Pausable, ReentrancyGuard, EIP712 {
                 keccak256(abi.encode(
                     REGISTER_TYPEHASH,
                     deviceHash,
-                    keccak256(bytes(deviceType)),
-                    keccak256(bytes(manufacturer)),
-                    keccak256(bytes(model)),
-                    keccak256(bytes(location))
+                    keccak256(bytes(ipfsCid)) // Updated for ipfsCid
                 ))
             );
             address signer = digest.recover(signature);
@@ -261,10 +241,7 @@ contract DeviceRegistry is AccessControl, Pausable, ReentrancyGuard, EIP712 {
 
     function _executeRegistration(
         bytes32 deviceHash,
-        string calldata deviceType,
-        string calldata manufacturer,
-        string calldata model,
-        string calldata location,
+        string calldata ipfsCid, // Replaced with ipfsCid
         address owner
     ) private {
         Device memory newDevice = Device({
@@ -272,17 +249,14 @@ contract DeviceRegistry is AccessControl, Pausable, ReentrancyGuard, EIP712 {
             status: DeviceStatus.Active,
             registrationDate: uint40(block.timestamp),
             lastUpdated: uint40(block.timestamp),
-            deviceType: deviceType,
-            manufacturer: manufacturer,
-            model: model,
-            location: location
+            deviceHash: deviceHash,
+            ipfsCid: ipfsCid
         });
 
         _devices[deviceHash] = newDevice;
         _ownerDevices[owner].push(deviceHash);
         _deviceOwners[deviceHash] = owner;
-        _deviceTypeCounts[deviceType]++;
-        emit DeviceRegistered(deviceHash, owner, deviceType, block.timestamp);
+        emit DeviceRegistered(deviceHash, owner, ipfsCid, block.timestamp);
     }
 
     function pause() external onlyAdmin {

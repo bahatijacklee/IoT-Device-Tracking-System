@@ -1,65 +1,41 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useAccount, useReadContract, useContractWrite } from 'wagmi';
 import { motion } from 'framer-motion';
 import { Database } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { zeroAddress } from 'viem';
-import { DataVisualizer } from '@/components/DataVisualizer';
-import iotDataLedgerAbi from '@/abis/IoTDataLedger.json';
-
-const IOT_DATA_LEDGER = "0xf6A7E3d41611FcAf815C6943807B690Ee9Bf8220";
+import { useIoTDataLedger } from '@/hooks/useIoTDataLedger';
+import { toast } from 'sonner';
 
 export default function Data() {
-  const { isConnected, address } = useAccount();
-  const [deviceHash, setDeviceHash] = useState('');
-  const [dataType, setDataType] = useState('');
-  const [dataHash, setDataHash] = useState('');
-  const [showVisualizer, setShowVisualizer] = useState(true);
+  const [deviceId, setDeviceId] = useState('');
+  const [dataValue, setDataValue] = useState('');
+  
+  const {
+    handleSubmitData,
+    isSubmitting,
+    pendingRequests,
+    isLoadingRequests
+  } = useIoTDataLedger();
 
-  // Fetch data records (first 10 for simplicity)
-  const { data: records, isLoading: recordsLoading } = useReadContract({
-    address: IOT_DATA_LEDGER as `0x${string}`,
-    abi: iotDataLedgerAbi.abi,
-    functionName: 'getRecords',
-    args: [deviceHash || zeroAddress, 0n, 10n], // Use BigInt for pagination
-    enabled: isConnected,
-  });
-
-  // Write to record data
-  const { writeAsync: recordData, isLoading: recording } = useContractWrite({
-    address: IOT_DATA_LEDGER as `0x${string}`,
-    abi: iotDataLedgerAbi.abi,
-    functionName: 'recordData',
-  });
-
-  const handleRecordData = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!deviceHash || !dataType || !dataHash) return;
+    if (!deviceId || !dataValue) {
+      toast.error('Please fill in all fields');
+      return;
+    }
 
     try {
-      await recordData({
-        args: [deviceHash, dataType, dataHash],
-      });
-      setDeviceHash('');
-      setDataType('');
-      setDataHash('');
+      await handleSubmitData(deviceId, dataValue, Date.now());
+      setDeviceId('');
+      setDataValue('');
     } catch (error) {
-      console.error('Error recording data:', error);
+      console.error('Error submitting data:', error);
     }
   };
-
-  if (!isConnected) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <p className="text-lg text-foreground">Please connect your wallet to view and record data</p>
-      </div>
-    );
-  }
 
   return (
     <main className="container mx-auto p-4 sm:p-6 lg:p-8 bg-background transition-all smooth-transition">
@@ -68,102 +44,70 @@ export default function Data() {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-12 animate-fadeIn transition-all smooth-transition text-center"
       >
-        <div className="flex flex-col items-center">
-          <h1 className="text-4xl font-bold flex items-center text-foreground transition-all smooth-transition">
-            <Database className="mr-4 h-8 w-8 sm:h-10 sm:w-10 text-primary transition-all smooth-transition" /> IoT Data Records
-          </h1>
-          <Button
-            variant="outline"
-            onClick={() => setShowVisualizer(!showVisualizer)}
-            className="mt-4 transition-all smooth-transition"
-          >
-            {showVisualizer ? 'Hide Charts' : 'Show Charts'}
-          </Button>
-        </div>
+        <h1 className="text-4xl font-bold flex items-center justify-center text-foreground transition-all smooth-transition">
+          <Database className="mr-4 h-8 w-8 sm:h-10 sm:w-10 text-primary transition-all smooth-transition" /> IoT Data Management
+        </h1>
 
-        {/* Data Recording Form */}
+        {/* Submit IoT Device Data Card */}
         <div className="max-w-md mx-auto bg-card border border-border rounded-xl p-6 shadow-lg hover:shadow-xl hover:shadow-primary/30 transition-all smooth-transition">
-          <form onSubmit={handleRecordData} className="space-y-6">
-            <div>
-              <Label htmlFor="deviceHash" className="text-foreground">Device Hash</Label>
-              <Input
-                id="deviceHash"
-                value={deviceHash}
-                onChange={(e) => setDeviceHash(e.target.value)}
-                placeholder="Enter device hash"
-                className="w-full bg-background text-foreground border-border transition-all smooth-transition"
-              />
-            </div>
-            <div>
-              <Label htmlFor="dataType" className="text-foreground">Data Type</Label>
-              <Input
-                id="dataType"
-                value={dataType}
-                onChange={(e) => setDataType(e.target.value)}
-                placeholder="Enter data type (e.g., temperature)"
-                className="w-full bg-background text-foreground border-border transition-all smooth-transition"
-              />
-            </div>
-            <div>
-              <Label htmlFor="dataHash" className="text-foreground">Data Hash</Label>
-              <Input
-                id="dataHash"
-                value={dataHash}
-                onChange={(e) => setDataHash(e.target.value)}
-                placeholder="Enter data hash"
-                className="w-full bg-background text-foreground border-border transition-all smooth-transition"
-              />
-            </div>
-            <Button type="submit" className="btn-modern w-full transition-all smooth-transition" disabled={recording}>
-              {recording ? 'Recording...' : 'Record Data'}
-            </Button>
-          </form>
+          <CardHeader>
+            <CardTitle className="text-foreground transition-all smooth-transition">Submit IoT Device Data</CardTitle>
+            <CardDescription className="text-muted-foreground transition-all smooth-transition">Record new data from your IoT device on the blockchain</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="deviceId" className="text-foreground">Device ID</Label>
+                <Input
+                  id="deviceId"
+                  value={deviceId}
+                  onChange={(e) => setDeviceId(e.target.value)}
+                  placeholder="Enter device ID"
+                  required
+                  className="w-full bg-background text-foreground border-border transition-all smooth-transition"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dataValue" className="text-foreground">Data Value</Label>
+                <Input
+                  id="dataValue"
+                  value={dataValue}
+                  onChange={(e) => setDataValue(e.target.value)}
+                  placeholder="Enter data value"
+                  required
+                  className="w-full bg-background text-foreground border-border transition-all smooth-transition"
+                />
+              </div>
+              <Button type="submit" className="btn-modern w-full transition-all smooth-transition" disabled={isSubmitting}>
+                {isSubmitting ? 'Submitting...' : 'Submit Data'}
+              </Button>
+            </form>
+          </CardContent>
         </div>
 
-        {/* Data Visualization */}
-        {showVisualizer && !recordsLoading && records && records.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="max-w-4xl mx-auto transition-all smooth-transition"
-          >
-            <DataVisualizer records={records} />
-          </motion.div>
-        )}
-
-        {/* Data Records Table */}
-        <div className="max-w-4xl mx-auto mt-12">
-          <h2 className="text-2xl font-semibold text-foreground mb-6 text-center transition-all smooth-transition">Recent Records</h2>
-          {recordsLoading ? (
-            <p className="text-muted-foreground text-center">Loading records...</p>
-          ) : records && records.length > 0 ? (
-            <div className="bg-card border border-border rounded-xl shadow-lg transition-all smooth-transition">
-              <Table>
-                <TableHeader className="bg-muted">
-                  <TableRow>
-                    <TableHead className="text-foreground text-center">Device Hash</TableHead>
-                    <TableHead className="text-foreground text-center">Data Type</TableHead>
-                    <TableHead className="text-foreground text-center">Data Hash</TableHead>
-                    <TableHead className="text-foreground text-center">Timestamp</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {records.map((record: any, index: number) => (
-                    <TableRow key={index} className="hover:bg-muted/50 transition-all smooth-transition">
-                      <TableCell className="text-foreground text-center">{record.deviceHash}</TableCell>
-                      <TableCell className="text-foreground text-center">{record.dataType}</TableCell>
-                      <TableCell className="text-foreground text-center">{record.dataHash}</TableCell>
-                      <TableCell className="text-foreground text-center">
-                        {new Date(Number(record.timestamp) * 1000).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-center">No records found</p>
-          )}
+        {/* Pending Data Disputes Card */}
+        <div className="max-w-md mx-auto bg-card border border-border rounded-xl p-6 shadow-lg hover:shadow-xl hover:shadow-primary/30 transition-all smooth-transition">
+          <CardHeader>
+            <CardTitle className="text-foreground transition-all smooth-transition">Pending Data Disputes</CardTitle>
+            <CardDescription className="text-muted-foreground transition-all smooth-transition">View current pending data validation requests</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingRequests ? (
+              <p className="text-green-500">Loading disputes...</p> // Changed to green
+            ) : pendingRequests && pendingRequests.length > 0 ? (
+              <ul className="space-y-2">
+                {pendingRequests.map((request: any, index: number) => (
+                  <li key={index} className="p-2 border border-border rounded bg-background transition-all smooth-transition">
+                    Device ID: {request.deviceId}<br />
+                    Data Value: {request.value}<br />
+                    Timestamp: {new Date(Number(request.timestamp)).toLocaleString()}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground">No pending disputes</p>
+            )}
+          </CardContent>
         </div>
       </motion.div>
     </main>

@@ -1,10 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useAdminAccess } from '@/hooks/useAdminAccess';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from '@/components/ui/button';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { Shield } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useAccount, useContractRead, useContractWrite, useWatchContractEvent } from 'wagmi';
 import { motion } from 'framer-motion';
-import { Shield } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -13,23 +22,34 @@ import accessManagerAbi from '@/abis/AccessManager.json';
 import oracleIntegrationAbi from '@/abis/OracleIntegration.json';
 import { formatUnits, keccak256, stringToHex } from 'viem';
 
-const ACCESS_MANAGER = "0x18C792C368279C490042E85fb4DCC2FB650CE44e";
-const ORACLE_INTEGRATION = "0x18C792C368279C490042E85fb4DCC2FB650CE44e"; // Replace with actual address
+// Updated with new deployment addresses
+const ACCESS_MANAGER = "0x18C792C368279C490042E85fb4DCC2FB650CE44e"; // Replace with actual address if changed
+const ORACLE_INTEGRATION = "0x48C20882E61Ca563E064376480D886870d1d695e"; // Updated from redeployment
 
 export default function Admin() {
-  const { isConnected, address } = useAccount();
+  const { isAdmin, isLoading, isConnected } = useAdminAccess();
   const { toast } = useToast();
   const [newAdmin, setNewAdmin] = useState('');
   const [oracleAddress, setOracleAddress] = useState('');
   const [dataFeedId, setDataFeedId] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Don't render anything until mounted to prevent hydration issues
+  if (!mounted) {
+    return null;
+  }
 
   // Check if current user is admin
-  const { data: isAdmin } = useContractRead({
+  const { data: isAdminCheck } = useContractRead({
     address: ACCESS_MANAGER as `0x${string}`,
     abi: accessManagerAbi.abi,
     functionName: 'isAdmin',
-    args: [address],
-    enabled: isConnected && !!address,
+    args: [useAccount().address],
+    enabled: isConnected && !!useAccount().address,
   });
 
   // Add new admin
@@ -183,86 +203,114 @@ export default function Admin() {
 
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-lg">Please connect your wallet to access admin features</p>
+      <div className="container mx-auto p-4 text-center">
+        <Card className="max-w-md mx-auto">
+          <CardHeader>
+            <CardTitle>Connect Wallet</CardTitle>
+            <CardDescription>Please connect your wallet to access admin features</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ConnectButton />
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  if (!isAdmin) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-lg text-red-500">Access denied. Admin privileges required.</p>
+      <div className="container mx-auto p-4 text-center">
+        <Card className="max-w-md mx-auto">
+          <CardHeader>
+            <CardTitle>Loading...</CardTitle>
+            <CardDescription>Checking admin access</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!isAdminCheck) {
+    return (
+      <div className="container mx-auto p-4 text-center">
+        <Card className="max-w-md mx-auto border-destructive">
+          <CardHeader>
+            <Shield className="w-12 h-12 mx-auto text-destructive" />
+            <CardTitle className="text-destructive">Access Denied</CardTitle>
+            <CardDescription>You do not have admin privileges</CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     );
   }
 
   return (
-    <main className="container mx-auto p-8">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="space-y-8"
-      >
-        <h1 className="text-4xl font-bold flex items-center">
-          <Shield className="mr-2" /> Admin Dashboard
-        </h1>
-
-        {/* Add Admin Form */}
-        <div className="p-6 bg-white rounded-lg shadow-md dark:bg-gray-800">
-          <h2 className="text-2xl font-semibold mb-4">Add New Admin</h2>
-          <form onSubmit={handleAddAdmin} className="space-y-4">
-            <div>
-              <Label htmlFor="newAdmin">Admin Address</Label>
-              <Input
-                id="newAdmin"
-                value={newAdmin}
-                onChange={(e) => setNewAdmin(e.target.value)}
-                placeholder="0x..."
-              />
-            </div>
-            <Button type="submit" disabled={addingAdmin}>
-              {addingAdmin ? 'Adding...' : 'Add Admin'}
-            </Button>
-          </form>
-        </div>
-
-        {/* Oracle Settings */}
-        <div className="p-6 bg-white rounded-lg shadow-md dark:bg-gray-800">
-          <h2 className="text-2xl font-semibold mb-4">Oracle Settings</h2>
-          <div className="space-y-6">
-            <form onSubmit={handleSetOracle} className="space-y-4">
+    <div className="container mx-auto p-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Admin Dashboard</CardTitle>
+          <CardDescription>Manage your IoT device tracking system</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* Add Admin Form */}
+          <div className="max-w-md mx-auto bg-card border border-border rounded-xl p-6 shadow-lg hover:shadow-xl hover:shadow-secondary/30 transition-all smooth-transition">
+            <h2 className="text-2xl font-semibold text-foreground mb-6 text-center transition-all smooth-transition">Add New Admin</h2>
+            <form onSubmit={handleAddAdmin} className="space-y-6">
               <div>
-                <Label htmlFor="oracleAddress">Oracle Address</Label>
+                <Label htmlFor="newAdmin" className="text-foreground">Admin Address</Label>
                 <Input
-                  id="oracleAddress"
-                  value={oracleAddress}
-                  onChange={(e) => setOracleAddress(e.target.value)}
+                  id="newAdmin"
+                  value={newAdmin}
+                  onChange={(e) => setNewAdmin(e.target.value)}
                   placeholder="0x..."
+                  className="w-full bg-background text-foreground border-border transition-all smooth-transition"
                 />
               </div>
-              <Button type="submit" disabled={settingOracle}>
-                {settingOracle ? 'Setting...' : 'Set Oracle Address'}
-              </Button>
-            </form>
-
-            <form onSubmit={handleSetDataFeed} className="space-y-4">
-              <div>
-                <Label htmlFor="dataFeedId">Data Feed ID</Label>
-                <Input
-                  id="dataFeedId"
-                  value={dataFeedId}
-                  onChange={(e) => setDataFeedId(e.target.value)}
-                  placeholder="Enter data feed ID"
-                />
-              </div>
-              <Button type="submit" disabled={settingFeed}>
-                {settingFeed ? 'Setting...' : 'Set Data Feed ID'}
+              <Button type="submit" className="btn-modern w-full transition-all smooth-transition" disabled={addingAdmin}>
+                {addingAdmin ? 'Adding...' : 'Add Admin'}
               </Button>
             </form>
           </div>
-        </div>
-      </motion.div>
-    </main>
+
+          {/* Oracle Settings */}
+          <div className="max-w-md mx-auto bg-card border border-border rounded-xl p-6 shadow-lg hover:shadow-xl hover:shadow-secondary/30 transition-all smooth-transition">
+            <h2 className="text-2xl font-semibold text-foreground mb-6 text-center transition-all smooth-transition">Oracle Settings</h2>
+            <div className="space-y-8">
+              <form onSubmit={handleSetOracle} className="space-y-6">
+                <div>
+                  <Label htmlFor="oracleAddress" className="text-foreground">Oracle Address</Label>
+                  <Input
+                    id="oracleAddress"
+                    value={oracleAddress}
+                    onChange={(e) => setOracleAddress(e.target.value)}
+                    placeholder="0x..."
+                    className="w-full bg-background text-foreground border-border transition-all smooth-transition"
+                  />
+                </div>
+                <Button type="submit" className="btn-modern w-full transition-all smooth-transition" disabled={settingOracle}>
+                  {settingOracle ? 'Setting...' : 'Set Oracle Address'}
+                </Button>
+              </form>
+
+              <form onSubmit={handleSetDataFeed} className="space-y-6">
+                <div>
+                  <Label htmlFor="dataFeedId" className="text-foreground">Data Feed ID</Label>
+                  <Input
+                    id="dataFeedId"
+                    value={dataFeedId}
+                    onChange={(e) => setDataFeedId(e.target.value)}
+                    placeholder="Enter data feed ID"
+                    className="w-full bg-background text-foreground border-border transition-all smooth-transition"
+                  />
+                </div>
+                <Button type="submit" className="btn-modern w-full transition-all smooth-transition" disabled={settingFeed}>
+                  {settingFeed ? 'Setting...' : 'Set Data Feed ID'}
+                </Button>
+              </form>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
