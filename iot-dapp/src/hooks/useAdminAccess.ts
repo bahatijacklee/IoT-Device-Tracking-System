@@ -14,7 +14,9 @@ export function useAdminAccess() {
     abi: accessManagerAbi,
     functionName: 'hasRole',
     args: [GLOBAL_ADMIN_ROLE, address || '0x0'],
-    enabled: isConnected && !!address,
+    query: {
+      enabled: isConnected && !!address,
+    }
   });
 
   return {
