@@ -16,8 +16,9 @@ node_modules
 # Hardhat Ignition default folder for deployments against a local node
 ignition/deployments/chain-31337
 
-.github
+/.github
 .vscode
 BackendIdea.md
 IntegrationDox.md
 ProjectWorkflow.md
+github-workflow.yaml
