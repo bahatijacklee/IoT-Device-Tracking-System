@@ -1,4 +1,4 @@
-  
+
 ---
 
 # **TraceNet - IoT Device Tracking System**  
@@ -8,6 +8,8 @@
 
 ## 🚀 Overview  
 **TraceNet** is a blockchain-powered platform for tracking and verifying IoT devices in real time. It enhances security, transparency, and data integrity using smart contracts and decentralized storage solutions.  
+
+🔗 **Live Deployment**: [TraceNet Frontend](https://io-t-chain-app.vercel.app/)  
 
 ## 🛠 Features  
 - **Device Registration & Management** – Securely register, update, and track IoT devices.  
@@ -67,4 +69,3 @@ This project is licensed under the MIT License.
 🐙 GitHub: [bahatijacklee](https://github.com/bahatijacklee)  
 
 ---
-
